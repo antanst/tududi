@@ -59,6 +59,7 @@ RUN npm install --production --no-audit --no-fund && \
     find node_modules -name "docs" -type d ! -path "*/googleapis/*" -exec rm -rf {} + 2>/dev/null || true && \
     find node_modules -name "examples" -type d -exec rm -rf {} + 2>/dev/null || true
 
+
 # Stage 3: Test Stage (run tests before production)
 FROM node:20-alpine AS test
 
@@ -74,11 +75,7 @@ RUN apk add --no-cache --virtual .test-deps \
 # Copy backend package files and install all dependencies (including dev)
 COPY backend/package*.json ./backend/
 RUN cd backend && \
-    # Retry npm install with exponential backoff for network issues
-    for i in 1 2 3; do \
-        npm install --no-audit --no-fund && break || \
-        (echo "npm install failed, attempt $i/3, retrying in $((i*5)) seconds..." && sleep $((i*5))); \
-    done
+    npm install --no-audit --no-fund
 
 # Copy backend source code including tests
 COPY backend/ ./backend/
@@ -86,14 +83,8 @@ COPY backend/ ./backend/
 # Run tests
 RUN cd backend && npm test
 
-# Create test completion marker to ensure tests passed
-RUN echo "Tests passed successfully" > /app/test-success.marker
-
 # Stage 4: Final Production Image (minimal base)
 FROM node:20-alpine AS production
-
-# Copy test success marker to ensure tests passed before production build
-COPY --from=test /app/test-success.marker /tmp/test-success.marker
 
 # Set build-time and runtime UID/GID (default 1001)
 ARG APP_UID=1001
